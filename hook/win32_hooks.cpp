@@ -30,9 +30,9 @@ extern "C" __declspec(dllexport) void SwapBuffers_hook(HDC hdc)
     SwapBuffers(hdc);
     tk = GetTickCount64();
 }
-extern "C" __declspec(dllexport) void Message(string text)
+extern "C" __declspec(dllexport) void Message(const char* text)
 {
-    MessageBox(0,text.c_str(),"tips",0);
+    MessageBox(0,text,"tips",0);
 }
 // auto hook_all(...)                                                              
 // {                                                                           

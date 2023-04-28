@@ -6,41 +6,46 @@
 #include <boost/filesystem.hpp>
 using namespace std;
 
-#define HOOK_DLL "D:\\Opensource\\frame_count\\build\\Debug\\hook_dll.dll"
+#define HOOK_DLL "hook_dll.dll"
 
 #if WIN32
 #include "winuser.h"
 #include "tlhelp32.h"
-// void callfunc(HANDLE hProc, boost::process::child& child, string func)
-// {
-//     HMODULE hkdll = GetModuleHandleA(HOOK_DLL);
-//     HMODULE hkremote = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, child.id());
-//     MODULEENTRY32 me32={};
-//     me32.dwSize = sizeof(MODULEENTRY32);
-//     BOOL success =Module32First(hkremote, &me32);
-//     if(success == FALSE) CloseHandle(hkremote);
+void callfunc(string dllpath,boost::process::child& child, string func,string data)
+{
+    __int64 pid = (__int64)child.id();
+    HMODULE hmod = LoadLibrary(dllpath.c_str());
+    HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+    if(!hProcess) {
+        cout << "open process fail" <<endl;
+        return;
+    }
+    HMODULE hkdll = GetModuleHandleA(HOOK_DLL);
+    HANDLE hkremote = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+    MODULEENTRY32 me32={};
+    me32.dwSize = sizeof(MODULEENTRY32);
+    BOOL success =Module32First(hkremote, &me32);
+    if(success == FALSE) CloseHandle(hkremote);
 
-//     uintptr_t hbase=0;
-//     do{
-//         if(me32.szModule == HOOK_DLL)
-//             hbase=me32.modBaseAddr;
-//     }while(Module32Next(hkremote,me32))
-//     uintptr_t func_local = (uintptr_t)GetProcAddress(hkdll, func);
-//     uintptr_t func_remote = func_local+hbase-(uintptr_t)hkdll;
+    uintptr_t hbase=0;
+    do{
+        if(strcmp(me32.szModule,HOOK_DLL)==0)
+            hbase=(uintptr_t)me32.modBaseAddr;
+    }while(Module32Next(hkremote,&me32));
+    uintptr_t func_local = (uintptr_t)GetProcAddress(hkdll, func.c_str());
+    uintptr_t func_remote = func_local+hbase-(uintptr_t)hkdll;    //not kernel library
+    FreeLibrary(hmod);
 
-//     void *remoteMem = VirtualAllocEx(hProc, NULL, dataLen, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-//     SIZE_T numWritten;
-//     WriteProcessMemory(hProcess, remoteMem, data, dataLen, &numWritten);
+    void *remoteMem = VirtualAllocEx(hProcess, NULL, data.size(), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    SIZE_T numWritten=0;
+    WriteProcessMemory(hProcess, remoteMem, data.c_str(), data.size(), &numWritten);
 
-//     HANDLE hThread =
-//         CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)func_remote, remoteMem, 0, NULL);
-//     WaitForSingleObject(hThread, INFINITE);
-
-//     ReadProcessMemory(hProcess, remoteMem, data, dataLen, &numWritten);
-
-//     CloseHandle(hThread);
-//     VirtualFreeEx(hProcess, remoteMem, 0, MEM_RELEASE);
-// }
+    HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)func_remote, remoteMem, 0, NULL);
+    WaitForSingleObject(hThread, INFINITE);
+    //ReadProcessMemory(hProcess, remoteMem,  (void*)data.c_str(), data.size(), &numWritten);
+    CloseHandle(hThread);
+    VirtualFreeEx(hProcess, remoteMem, 0, MEM_RELEASE);
+}
 void inject(string filepath, boost::process::child& child)
 {
     __int64 pid = (__int64)child.id();
@@ -72,7 +77,6 @@ void inject(string filepath, boost::process::child& child)
         return;
     }
     WaitForSingleObject(hThread, INFINITE);
-    //callfunc(hProc, child, "ApplyHooks");
 
     VirtualFreeEx(hProc, lpAddr, 0, MEM_RELEASE);
     CloseHandle(hThread);
@@ -97,8 +101,12 @@ int main(int argc, char* argv[])
 
         boost::filesystem::path fpath(argv[1]);
         child = boost::process::child(fpath,boost::process::std_out>out_stream,boost::process::start_dir(fpath.parent_path()));
-        inject(HOOK_DLL, child);
+
+        boost::filesystem::path dllpath(HOOK_DLL);
+        inject(boost::filesystem::system_complete(dllpath).string(), child);
         signal(SIGABRT,[](int){child.terminate();});
+
+        callfunc(boost::filesystem::system_complete(dllpath).string(),child, "Message","Hello");
 
         child.wait();
         out_stream.pipe().close();
