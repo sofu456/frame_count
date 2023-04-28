@@ -21,19 +21,19 @@ void callfunc(string dllpath,boost::process::child& child, string func,string da
         return;
     }
     HMODULE hkdll = GetModuleHandleA(HOOK_DLL);
-    HANDLE hkremote = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
-    MODULEENTRY32 me32={};
-    me32.dwSize = sizeof(MODULEENTRY32);
-    BOOL success =Module32First(hkremote, &me32);
-    if(success == FALSE) CloseHandle(hkremote);
+    // HANDLE hkremote = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+    // MODULEENTRY32 me32={};
+    // me32.dwSize = sizeof(MODULEENTRY32);
+    // BOOL success =Module32First(hkremote, &me32);
+    // if(success == FALSE) CloseHandle(hkremote);
 
-    uintptr_t hbase=0;
-    do{
-        if(strcmp(me32.szModule,HOOK_DLL)==0)
-            hbase=(uintptr_t)me32.modBaseAddr;
-    }while(Module32Next(hkremote,&me32));
+    // uintptr_t hbase=0;
+    // do{
+    //     if(strcmp(me32.szModule,HOOK_DLL)==0)
+    //         hbase=(uintptr_t)me32.modBaseAddr;
+    // }while(Module32Next(hkremote,&me32));
     uintptr_t func_local = (uintptr_t)GetProcAddress(hkdll, func.c_str());
-    uintptr_t func_remote = func_local+hbase-(uintptr_t)hkdll;    //not kernel library
+    uintptr_t func_remote = func_local;//+hbase-(uintptr_t)hkdll;    //not kernel library
     FreeLibrary(hmod);
 
     void *remoteMem = VirtualAllocEx(hProcess, NULL, data.size(), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
